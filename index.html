@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#4f46e5">
+<title>منبه الدروس</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body{font-family:'Cairo',sans-serif;background:#f3f4f6;-webkit-tap-highlight-color:transparent;margin:0}
+  .hide-scrollbar::-webkit-scrollbar{display:none}
+  .hide-scrollbar{-ms-overflow-style:none;scrollbar-width:none}
+  #app-container{width:100%;height:100dvh;background:#f9fafb;display:flex;flex-direction:column;overflow:hidden;margin:0 auto;position:relative}
+  @media (min-width:640px){
+    #app-container{max-width:400px;height:90vh;margin-top:5vh;border-radius:2.5rem;box-shadow:0 25px 50px -12px rgba(0,0,0,.25);border:8px solid #111827}
+  }
+  @keyframes ring{0%,100%{transform:rotate(0)}25%{transform:rotate(-12deg)}75%{transform:rotate(12deg)}}
+  .ringing{animation:ring .5s ease-in-out infinite}
+</style>
+</head>
+<body>
+<div id="app-container">
+
+  <header class="bg-indigo-600 text-white px-6 pb-5 rounded-b-3xl shadow-md z-10 flex-shrink-0" style="padding-top:max(2rem,env(safe-area-inset-top))">
+    <h1 class="text-2xl font-bold text-center">جدول دروسي 📚</h1>
+    <p class="text-indigo-200 text-center text-sm mt-1">منبه الدروس</p>
+  </header>
+
+  <!-- بانر التنبيه داخل الصفحة -->
+  <div id="alert-banner" class="hidden absolute top-24 inset-x-4 z-40 bg-amber-400 text-gray-900 rounded-2xl shadow-xl p-4 flex items-center justify-between gap-3" role="alert">
+    <div class="flex items-center gap-3">
+      <span class="text-3xl ringing">🔔</span>
+      <p id="alert-text" class="font-bold"></p>
+    </div>
+    <button id="alert-close" class="bg-gray-900 text-white rounded-full px-4 py-2 text-sm font-bold">إغلاق</button>
+  </div>
+
+  <!-- الإعدادات -->
+  <section class="px-4 mt-4 flex-shrink-0 space-y-2">
+    <div class="flex items-center gap-2">
+      <label for="lead" class="text-sm font-bold text-gray-600 flex-shrink-0">نبّهني قبل الدرس بـ</label>
+      <select id="lead" class="flex-1 bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm font-semibold">
+        <option value="0">في موعد الدرس</option>
+        <option value="5">5 دقائق</option>
+        <option value="10">10 دقائق</option>
+        <option value="15">15 دقيقة</option>
+        <option value="30">30 دقيقة</option>
+      </select>
+    </div>
+    <div class="flex gap-2">
+      <button id="btn-notify" class="flex-1 bg-indigo-100 text-indigo-700 rounded-xl py-2 text-sm font-bold">تفعيل الإشعارات</button>
+      <button id="btn-test" class="flex-1 bg-white border border-gray-200 text-gray-700 rounded-xl py-2 text-sm font-bold">تجربة الصوت 🔊</button>
+    </div>
+    <p class="text-xs text-gray-500 leading-5">⚠️ المنبه يعمل ما دامت الصفحة مفتوحة في المتصفح.</p>
+  </section>
+
+  <nav class="px-4 mt-3 flex-shrink-0" aria-label="أيام الأسبوع">
+    <div id="days-container" class="flex overflow-x-auto pb-2 gap-2 hide-scrollbar"></div>
+  </nav>
+
+  <main id="lessons-container" class="flex-1 overflow-y-auto p-4 space-y-4" style="padding-bottom:max(2rem,env(safe-area-inset-bottom))"></main>
+</div>
+
+<script>
+/* ---------- البيانات (الوقت بنظام 24 ساعة ليسهل حساب التنبيه) ---------- */
+const initialSchedule = [
+  { id: 1,  day: 'السبت',   subject: 'اللغة العربية',        t: '13:00', type: 'arabic'  },
+  { id: 2,  day: 'الأحد',   subject: 'العلوم',               t: '16:00', type: 'science' },
+  { id: 3,  day: 'الأحد',   subject: 'الدراسات الاجتماعية',  t: '17:00', type: 'social'  },
+  { id: 4,  day: 'الاثنين', subject: 'الرياضيات',            t: '16:00', type: 'math'    },
+  { id: 5,  day: 'الاثنين', subject: 'اللغة الإنجليزية',     t: '17:00', type: 'english' },
+  { id: 6,  day: 'الأربعاء',subject: 'اللغة العربية',        t: '14:00', type: 'arabic'  },
+  { id: 7,  day: 'الأربعاء',subject: 'العلوم',               t: '15:00', type: 'science' },
+  { id: 8,  day: 'الأربعاء',subject: 'الدراسات الاجتماعية',  t: '17:00', type: 'social'  },
+  { id: 9,  day: 'الخميس',  subject: 'الرياضيات',            t: '17:00', type: 'math'    },
+  { id: 10, day: 'الجمعة',  subject: 'اللغة العربية',        t: '08:00', type: 'arabic'  },
+  { id: 11, day: 'الجمعة',  subject: 'العلوم',               t: '10:00', type: 'science' },
+  { id: 12, day: 'الجمعة',  subject: 'اللغة الإنجليزية',     t: '14:00', type: 'english' },
+];
+const days = ['الكل','السبت','الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة'];
+const dayByGetDay = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت']; // Date.getDay()
+
+/* ---------- الحفظ (مع حماية من أخطاء localStorage) ---------- */
+const KEY = 'lessonAlarm.v2';
+function loadState(){
+  try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; }
+}
+function saveState(){
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {}
+}
+const state = Object.assign({ alarms: {}, lead: 10, fired: {} }, loadState());
+const isActive = id => state.alarms[id] !== false;      // الافتراضي: مفعّل
+const schedule = initialSchedule;
+
+let selectedDay = dayByGetDay[new Date().getDay()];
+if (!days.includes(selectedDay) || selectedDay === 'الثلاثاء') selectedDay = 'الكل';
+
+/* ---------- أدوات ---------- */
+const subjects = {
+  arabic:  { emoji: '📖', color: 'text-emerald-600', bg: 'bg-emerald-100' },
+  science: { emoji: '🧪', color: 'text-blue-600',    bg: 'bg-blue-100' },
+  math:    { emoji: '🧮', color: 'text-red-600',     bg: 'bg-red-100' },
+  english: { emoji: '🔤', color: 'text-purple-600',  bg: 'bg-purple-100' },
+  social:  { emoji: '🌍', color: 'text-orange-600',  bg: 'bg-orange-100' },
+};
+const bellOn  = '<svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+const bellOff = '<svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.7 3A6 6 0 0 1 18 8c0 2.7.5 4.6 1.1 6"/><path d="M17 17H3s3-2 3-9c0-.7.1-1.3.3-1.9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><path d="m2 2 20 20"/></svg>';
+
+function fmtTime(t){
+  const [h, m] = t.split(':').map(Number);
+  return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${h < 12 ? 'صباحاً' : 'مساءً'}`;
+}
+function esc(s){ const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+/* ---------- الرسم ---------- */
+function renderDays(){
+  const c = document.getElementById('days-container');
+  c.innerHTML = '';
+  days.forEach(day => {
+    const b = document.createElement('button');
+    b.textContent = day;
+    b.className = 'flex-shrink-0 px-4 py-2 rounded-full text-sm font-bold shadow-sm transition-colors ' +
+      (selectedDay === day ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 border border-gray-200');
+    b.onclick = () => { selectedDay = day; renderDays(); renderLessons(); };
+    c.appendChild(b);
+  });
+}
+
+function renderLessons(){
+  const c = document.getElementById('lessons-container');
+  const list = (selectedDay === 'الكل' ? schedule : schedule.filter(l => l.day === selectedDay))
+    .slice().sort((a,b) => days.indexOf(a.day) - days.indexOf(b.day) || a.t.localeCompare(b.t));
+
+  if (!list.length) {
+    c.innerHTML = selectedDay === 'الثلاثاء'
+      ? '<div class="text-center text-gray-500 mt-10"><div class="text-5xl mb-3">🎉</div><p class="text-lg font-bold">يوم إجازة! لا توجد دروس</p></div>'
+      : '<p class="text-center text-gray-400 mt-10">لا توجد دروس في هذا اليوم.</p>';
+    return;
+  }
+  c.innerHTML = list.map(l => {
+    const s = subjects[l.type] || subjects.arabic;
+    const on = isActive(l.id);
+    return `
+    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+      <div class="flex items-center gap-4">
+        <div class="w-14 h-14 ${s.bg} ${s.color} rounded-2xl flex items-center justify-center text-3xl">${s.emoji}</div>
+        <div>
+          <h3 class="font-bold text-gray-800 text-lg">${esc(l.subject)}</h3>
+          <div class="flex items-center text-gray-500 text-sm mt-1 gap-3 font-semibold">
+            <span>📅 ${esc(l.day)}</span>
+            <span class="text-indigo-600">🕒 ${fmtTime(l.t)}</span>
+          </div>
+        </div>
+      </div>
+      <button data-id="${l.id}" aria-label="${on ? 'إيقاف' : 'تفعيل'} منبه ${esc(l.subject)}" aria-pressed="${on}"
+        class="alarm-btn w-12 h-12 rounded-full flex items-center justify-center transition-colors ${on ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-400'}">
+        ${on ? bellOn : bellOff}
+      </button>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('lessons-container').addEventListener('click', e => {
+  const btn = e.target.closest('.alarm-btn');
+  if (!btn) return;
+  const id = Number(btn.dataset.id);
+  state.alarms[id] = !isActive(id);
+  saveState();
+  renderLessons();
+  const l = schedule.find(x => x.id === id);
+  showToast(`منبه ${l.subject}: ${isActive(id) ? 'تم التفعيل' : 'تم الإيقاف'}`);
+});
+
+function showToast(msg){
+  const t = document.createElement('div');
+  t.className = 'fixed left-1/2 -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-full shadow-lg z-50 text-sm font-bold transition-opacity duration-300';
+  t.style.bottom = 'max(2.5rem, env(safe-area-inset-bottom))';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 2000);
+}
+
+/* ---------- الصوت والتنبيه الفعلي ---------- */
+let audioCtx;
+function unlockAudio(){
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch {}
+}
+document.addEventListener('click', unlockAudio, { once: true });
+
+function beep(times = 3){
+  unlockAudio();
+  if (!audioCtx) return;
+  for (let i = 0; i < times; i++) {
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    const t0 = audioCtx.currentTime + i * 0.6;
+    o.frequency.value = 880; o.type = 'sine';
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.4, t0 + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.45);
+    o.connect(g).connect(audioCtx.destination);
+    o.start(t0); o.stop(t0 + 0.5);
+  }
+}
+
+function ring(lesson, lead){
+  const msg = lead > 0
+    ? `درس ${lesson.subject} يبدأ بعد ${lead} دقيقة (${fmtTime(lesson.t)})`
+    : `حان موعد درس ${lesson.subject} الآن`;
+  document.getElementById('alert-text').textContent = msg;
+  document.getElementById('alert-banner').classList.remove('hidden');
+  beep();
+  if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]);
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try { new Notification('منبه الدروس 📚', { body: msg, tag: 'lesson-' + lesson.id }); } catch {}
+  }
+}
+document.getElementById('alert-close').onclick = () =>
+  document.getElementById('alert-banner').classList.add('hidden');
+
+function checkAlarms(){
+  const now = new Date();
+  const today = dayByGetDay[now.getDay()];
+  const dateKey = now.toDateString();
+  schedule.forEach(l => {
+    if (l.day !== today || !isActive(l.id)) return;
+    const [h, m] = l.t.split(':').map(Number);
+    const start = new Date(now); start.setHours(h, m, 0, 0);
+    const fireAt = start.getTime() - state.lead * 60000;
+    const key = `${l.id}|${dateKey}|${state.lead}`;
+    if (now.getTime() >= fireAt && now.getTime() < start.getTime() + 60000 && !state.fired[key]) {
+      state.fired[key] = 1;
+      // تنظيف المفاتيح القديمة
+      Object.keys(state.fired).forEach(k => { if (!k.includes(dateKey)) delete state.fired[k]; });
+      saveState();
+      ring(l, state.lead);
+    }
+  });
+}
+
+/* ---------- عناصر التحكم ---------- */
+const leadSel = document.getElementById('lead');
+leadSel.value = String(state.lead);
+leadSel.onchange = () => { state.lead = Number(leadSel.value); saveState(); };
+
+const notifyBtn = document.getElementById('btn-notify');
+function updateNotifyBtn(){
+  if (!('Notification' in window)) { notifyBtn.textContent = 'الإشعارات غير مدعومة'; notifyBtn.disabled = true; return; }
+  const p = Notification.permission;
+  notifyBtn.textContent = p === 'granted' ? 'الإشعارات مفعّلة ✅' : p === 'denied' ? 'الإشعارات محظورة من المتصفح' : 'تفعيل الإشعارات';
+  notifyBtn.disabled = p !== 'default';
+}
+notifyBtn.onclick = async () => { unlockAudio(); await Notification.requestPermission(); updateNotifyBtn(); };
+document.getElementById('btn-test').onclick = () => { unlockAudio(); beep(2); showToast('هكذا سيكون صوت المنبه'); };
+
+/* ---------- التشغيل ---------- */
+updateNotifyBtn();
+renderDays();
+renderLessons();
+checkAlarms();
+setInterval(checkAlarms, 15000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkAlarms(); });
+</script>
+</body>
+</html>
